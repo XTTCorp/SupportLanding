@@ -1,21 +1,18 @@
 <#PSScriptInfo
 
-.VERSION 0.0.3
+.VERSION 0.0.4
 
-.GUID a4af5e07-d626-4b97-b4d6-eef7265d1f7c
+.AUTHOR jmaanao
 
-.AUTHOR asheroto
+.COMPANYNAME invtech
 
-.COMPANYNAME asheroto
-
-.TAGS PowerShell speedtest speed test speedtest.net
-
-.PROJECTURI https://github.com/asheroto/speedtest
+.TAGS PowerShell trigger for speedtest.net
 
 .RELEASENOTES
 [Version 0.0.1] - Initial Release.
 [Version 0.0.2] - Added UseBasicParsing parameter to Invoke-WebRequest commands to fix issue with certain systems.
 [Version 0.0.3] - Adjusted to work with GDPR acceptance.
+[Version 0.0.4] - Updated for Invision, validated contents and defined specific 
 
 #>
 
@@ -33,10 +30,8 @@ Designed to use with short URL to make it easy to remember.
 .PARAMETER Help
     Displays the full help information for the script.
 .NOTES
-	Version      : 0.0.3
-	Created by   : asheroto
-.LINK
-	Project Site: https://github.com/asheroto/speedtest
+	Version      : 0.0.4
+	Created by   : invtech
 #>
 param (
     [Parameter(Position = 0, ValueFromRemainingArguments = $true)]
@@ -44,8 +39,8 @@ param (
 )
 
 # Version
-$CurrentVersion = '0.0.3'
-$RepoOwner = 'asheroto'
+$CurrentVersion = '0.0.4'
+$RepoOwner = 'invtech'
 $RepoName = 'speedtest'
 $PowerShellGalleryName = 'speedtest'
 

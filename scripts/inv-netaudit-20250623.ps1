@@ -32,6 +32,10 @@ try {
     $publicIP = "Unavailable"
 }
 $ipconfigOutput = ipconfig /all
+$runid = Get-Random -Minimum 10000 -Maximum 100000
+$basepath = "C:\temp\netaudit\netaudit_report"
+$reportLoc = "$basepath`_$runid.txt"
+
 
 # ===DISPLAY WELCOME===
 Write-Output "netaudit.ps1 - Invision Technologies"
@@ -40,6 +44,7 @@ Write-Output "Hostname: $pcName"
 Write-Output "Domain: $domain"
 Write-Output "Private IP(s): $($privateIPs -join ', ')"
 Write-Output "Public IP: $publicIP"
+Write-Output "RunID: $runid"
 Write-Output ""
 Write-Output $ipconfigOutput
 
@@ -83,4 +88,24 @@ Write-Output $output
 $xttspeed = Invoke-RestMethod -Uri "https://xtt.cx/speed"
 
 # Run the test
-Invoke-Expression -Command $xttspeed
+$speedoutput = Invoke-Expression -Command $xttspeed
+
+# Log Data
+$speedrpt = $speedoutput | Select-Object -Last 11
+
+# Finalize Report
+$header = "=== netaudit.ps1 Report - Generated on $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') ==="
+$header | Out-File -FilePath $reportLoc -Encoding utf8 -Force
+Add-Content -Path $reportLoc -Value "`nHostname: $pcName"
+Add-Content -Path $reportLoc -Value "`nDomain: $domain"
+Add-Content -Path $reportLoc -Value "`nPrivate IP(s): $($privateIPs -join ', ')"
+Add-Content -Path $reportLoc -Value "`nPublic IP: $publicIP"
+Add-Content -Path $reportLoc -Value "`n"
+Add-Content -Path $reportLoc -Value "`n$ipconfigOutput"
+$speedrpt | Add-Content -Path $reportLoc -Encoding utf8
+$output | Add-Content -Path $reportLoc -Encoding utf8
+$speedrpt | Out-File -FilePath $reportLoc -Encoding utf8 -Force
+Add-Content -Path $reportLoc $output -Encoding utf8
+
+# Notify
+Write-output "Report exported to: $reportLoc"

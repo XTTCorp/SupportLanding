@@ -31,6 +31,7 @@ try {
 } catch {
     $publicIP = "Unavailable"
 }
+$ipconfigOutput = ipconfig /all
 
 # ===DISPLAY WELCOME===
 Write-Output "netaudit.ps1 - Invision Technologies"
@@ -39,6 +40,9 @@ Write-Output "Hostname: $pcName"
 Write-Output "Domain: $domain"
 Write-Output "Private IP(s): $($privateIPs -join ', ')"
 Write-Output "Public IP: $publicIP"
+Write-Output ""
+Write-Output $ipconfigOutput
+
 
 # ===BEGIN Ping100===
 # Define the target and the number of pings

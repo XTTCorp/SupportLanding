@@ -35,6 +35,8 @@ $ipconfigOutput = ipconfig /all
 $runid = Get-Random -Minimum 10000 -Maximum 100000
 $basepath = "C:\temp\netaudit\netaudit_report"
 $reportLoc = "$basepath`_$runid.txt"
+$wifi = Get-WifiNetworks | select index, ssid, signal, 'radio type' | sort signal -Descending | ft -AutoSize
+$wifirpt = $wifi | Format-Table -AutoSize | Out-String
 
 
 # ===DISPLAY WELCOME===
@@ -45,6 +47,8 @@ Write-Output "Domain: $domain"
 Write-Output "Private IP(s): $($privateIPs -join ', ')"
 Write-Output "Public IP: $publicIP"
 Write-Output "RunID: $runid"
+Write-Output ""
+Write-Output "$wifirpt"
 Write-Output ""
 Write-Output $ipconfigOutput
 
@@ -93,13 +97,38 @@ $speedoutput = Invoke-Expression -Command $xttspeed
 # Log Data
 $speedrpt = $speedoutput | Select-Object -Last 11
 
+# Get wireless info
+function Get-WifiNetworks {
+    $networks = netsh wlan sh net mode=bssid | % {
+        if ($_ -match '^SSID (\d+) : (.*)$') {
+            $current = @{
+                Index = $matches[1].trim()
+                SSID  = $matches[2].trim()
+            }
+            $current
+        } else {
+            if ($_ -match '^\s+(.*)\s+:\s+(.*)\s*$') {
+                $current[$matches[1].trim()] = $matches[2].trim()
+            }
+        }
+    }
+    $networks | % { [pscustomobject]$_ }
+}
+
+$wifi = Get-WifiNetworks | select index, ssid, signal, 'radio type' | sort signal -Descending | ft -AutoSize
+$wifirpt = $wifi | Format-Table -AutoSize | Out-String
+
+
 # Finalize Report
+New-Item -Path "C:\temp\netaudit" -ItemType Directory -Force | Out-Null
 $header = "=== netaudit.ps1 Report - Generated on $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') ==="
 $header | Out-File -FilePath $reportLoc -Encoding utf8 -Force
 Add-Content -Path $reportLoc -Value "`nHostname: $pcName"
 Add-Content -Path $reportLoc -Value "`nDomain: $domain"
 Add-Content -Path $reportLoc -Value "`nPrivate IP(s): $($privateIPs -join ', ')"
 Add-Content -Path $reportLoc -Value "`nPublic IP: $publicIP"
+Add-Content -Path $reportLoc -Value "`n"
+$wifirpt | Add-Content -Path $reportloc -Encoding utf8
 Add-Content -Path $reportLoc -Value "`n"
 Add-Content -Path $reportLoc -Value "`n$ipconfigOutput"
 $speedrpt | Add-Content -Path $reportLoc -Encoding utf8

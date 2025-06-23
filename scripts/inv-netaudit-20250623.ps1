@@ -79,4 +79,4 @@ Write-Output $output
 $xttspeed = Invoke-RestMethod -Uri "https://xtt.cx/speed"
 
 # Run the test
-Invoke-Expression -Command $scriptContent
+Invoke-Expression -Command $xttspeed

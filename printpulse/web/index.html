@@ -15,6 +15,7 @@
       --green: #10b981;
       --text: #f8fafc;
       --text-muted: #94a3b8;
+      --amber: #f59e0b;
       --red: #ef4444;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -26,14 +27,14 @@
       padding: 32px 20px;
     }
     .container {
-      max-width: 900px;
+      max-width: 920px;
       margin: 0 auto;
     }
     header {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 28px;
+      margin-bottom: 24px;
     }
     .logo-group {
       display: flex;
@@ -75,29 +76,32 @@
       100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
     }
 
-    /* Pairing Hero Card */
+    /* Hero Grid */
     .hero-card {
       background: linear-gradient(180deg, #162035, #111726);
       border: 1px solid #1e2d4a;
       border-radius: 20px;
       padding: 32px;
-      margin-bottom: 32px;
+      margin-bottom: 24px;
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: 1.2fr 1fr;
       gap: 28px;
       box-shadow: 0 10px 30px rgba(0,0,0,0.3);
     }
-    @media(max-width: 700px) {
+    @media(max-width: 750px) {
       .hero-card { grid-template-columns: 1fr; }
     }
-    .hero-title { font-size: 14px; text-transform: uppercase; letter-spacing: 1px; color: var(--cyan); font-weight: 700; margin-bottom: 8px; }
-    .hero-desc { color: var(--text-muted); font-size: 14px; line-height: 1.5; margin-bottom: 20px; }
+    .hero-title { font-size: 13px; text-transform: uppercase; letter-spacing: 1px; color: var(--cyan); font-weight: 700; margin-bottom: 6px; }
+    .hero-desc { color: var(--text-muted); font-size: 14px; line-height: 1.5; margin-bottom: 16px; }
     .pairing-box {
       background: #090d16;
       border: 1px dashed #334155;
       border-radius: 14px;
       padding: 20px;
       text-align: center;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
     }
     .pairing-label { font-size: 12px; color: var(--text-muted); text-transform: uppercase; margin-bottom: 6px; }
     .pairing-code {
@@ -106,7 +110,7 @@
       font-weight: 800;
       color: var(--cyan-glow);
       letter-spacing: 4px;
-      margin-bottom: 10px;
+      margin-bottom: 12px;
     }
     .btn {
       background: var(--cyan);
@@ -120,16 +124,45 @@
       transition: all 0.2s;
       display: inline-flex;
       align-items: center;
+      justify-content: center;
       gap: 8px;
     }
     .btn:hover { background: #0284c7; transform: translateY(-1px); }
     .btn-secondary { background: #1e293b; color: #cbd5e1; }
     .btn-secondary:hover { background: #334155; }
+    .btn-green { background: #10b981; }
+    .btn-green:hover { background: #059669; }
 
-    .info-list { list-style: none; display: flex; flex-direction: column; gap: 12px; }
-    .info-item { display: flex; justify-content: space-between; border-bottom: 1px solid #1e293b; padding-bottom: 8px; font-size: 14px; }
+    .info-list { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+    .info-item { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #1e293b; padding-bottom: 8px; font-size: 13px; }
     .info-item span:first-child { color: var(--text-muted); }
     .info-item span:last-child { font-family: 'JetBrains Mono', monospace; font-weight: 600; color: #e2e8f0; }
+
+    /* Network Card */
+    .network-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      padding: 24px;
+      margin-bottom: 24px;
+    }
+    .net-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+    .net-title { font-size: 16px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+    .zt-input-group {
+      display: flex;
+      gap: 10px;
+      margin-top: 14px;
+    }
+    .zt-input {
+      flex: 1;
+      background: #090d16;
+      border: 1px solid var(--card-border);
+      color: white;
+      padding: 10px 14px;
+      border-radius: 10px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 14px;
+    }
 
     /* Printers Section */
     .section-header {
@@ -204,20 +237,34 @@
       </div>
       <div class="status-badge">
         <div class="pulse-dot"></div>
-        Relay Active
+        Relay Daemon Active
       </div>
     </header>
 
+    <!-- Main Sync & Pairing Card -->
     <div class="hero-card">
       <div>
-        <div class="hero-title">Mobile App Syncing</div>
+        <div class="hero-title">Mobile App Remote Syncing</div>
         <p class="hero-desc">
-          To connect your <strong>PrintPulse Android App</strong> remotely from outside your home network, open the app, tap <strong>"Add Agent"</strong>, and enter this 6-digit code.
+          To connect your <strong>PrintPulse Android App</strong> remotely from outside your home network, enter your ZeroTier or Remote IP and this 6-digit code in the app's <strong>"Add Agent"</strong> screen.
         </p>
         <ul class="info-list">
-          <li class="info-item"><span>Local / ZeroTier IP</span><span id="agent-ip">127.0.0.1</span></li>
-          <li class="info-item"><span>Gateway Port</span><span id="agent-port">8088</span></li>
-          <li class="info-item"><span>Agent ID</span><span id="agent-id" style="font-size:11px;">...</span></li>
+          <li class="info-item">
+            <span>🌐 ZeroTier / Mesh IP</span>
+            <span id="zt-ip" style="color:var(--cyan-glow); font-size:14px;">Checking...</span>
+          </li>
+          <li class="info-item">
+            <span>🏠 Local LAN IP</span>
+            <span id="lan-ip">127.0.0.1</span>
+          </li>
+          <li class="info-item">
+            <span>🔌 Relay Port</span>
+            <span id="agent-port">8088</span>
+          </li>
+          <li class="info-item">
+            <span>🛡️ Agent ID</span>
+            <span id="agent-id" style="font-size:11px;">...</span>
+          </li>
         </ul>
       </div>
 
@@ -231,6 +278,26 @@
       </div>
     </div>
 
+    <!-- ZeroTier Integration Card -->
+    <div class="network-card">
+      <div class="net-header">
+        <div class="net-title">
+          <span>🌐 ZeroTier Network Tunnel</span>
+        </div>
+        <span id="zt-badge" style="font-size:12px; color:var(--text-muted);">Status: Checking...</span>
+      </div>
+      <p style="font-size: 13px; color: var(--text-muted); line-height: 1.5;">
+        Join this agent to your ZeroTier network to securely access cameras and printers from your phone anywhere without port forwarding.
+      </p>
+
+      <div class="zt-input-group">
+        <input type="text" id="zt-network-id" class="zt-input" placeholder="Enter 16-character ZeroTier Network ID (e.g. 8056c2e21c000001)" />
+        <button class="btn btn-green" onclick="joinZeroTier()">Join Network</button>
+      </div>
+      <div id="zt-feedback" style="font-size: 12px; margin-top: 8px;"></div>
+    </div>
+
+    <!-- Printers Section -->
     <div class="section-header">
       <div class="section-title">Local 3D Printers (Tunneled)</div>
       <button class="btn" onclick="openAddModal()">+ Add Printer</button>
@@ -250,15 +317,15 @@
         <input type="text" id="p-name" value="Elegoo Centauri Carbon" />
       </div>
       <div class="form-group">
-        <label>Local IP Address</label>
-        <input type="text" id="p-ip" placeholder="192.168.1.150" />
+        <label>Printer Local IP Address (Any Subnet / VLAN)</label>
+        <input type="text" id="p-ip" placeholder="192.168.1.150 or 10.0.x.x" />
       </div>
       <div class="form-group">
         <label>Printer Model Preset</label>
         <select id="p-type">
           <option value="ELEGOO_CENTAURI_CARBON">Elegoo Centauri Carbon (SDCP v3.0)</option>
           <option value="MOONRAKER_KLIPPER">Klipper / Moonraker</option>
-          <option value="CUSTOM">Custom</option>
+          <option value="CUSTOM">Custom Configuration</option>
         </select>
       </div>
       <div style="display:flex; justify-content: flex-end; gap: 8px; margin-top: 24px;">
@@ -275,14 +342,54 @@
       try {
         const res = await fetch('/api/agent/info');
         const data = await res.json();
-        document.getElementById('agent-ip').innerText = data.localIp;
+        document.getElementById('lan-ip').innerText = data.localIp;
         document.getElementById('agent-port').innerText = data.port;
         document.getElementById('agent-id').innerText = data.agentId.substring(0, 16) + '...';
         document.getElementById('pairing-code').innerText = data.pairingCode;
         currentPairingCode = data.pairingCode;
+
+        const ztIpElem = document.getElementById('zt-ip');
+        const ztBadge = document.getElementById('zt-badge');
+
+        if (data.zeroTierIp) {
+          ztIpElem.innerHTML = `<span style="color:#10b981;">${data.zeroTierIp} (Active)</span>`;
+          ztBadge.innerHTML = `<span style="color:#10b981; font-weight:600;">Connected (${data.zeroTierIp})</span>`;
+        } else if (data.zeroTierNetworks && data.zeroTierNetworks.length > 0) {
+          const net = data.zeroTierNetworks[0];
+          ztIpElem.innerText = net.assignedIps || "Waiting for Authorization";
+          ztBadge.innerText = `Network: ${net.nwid} (${net.status})`;
+        } else {
+          ztIpElem.innerHTML = `<span style="color:#f59e0b;">Not Joined</span>`;
+          ztBadge.innerText = data.zeroTierStatus === 'installed' ? 'ZeroTier Ready (Not Joined)' : 'ZeroTier Not Installed in LXC';
+        }
+
         loadPrinters();
       } catch (e) {
         console.error(e);
+      }
+    }
+
+    async function joinZeroTier() {
+      const netId = document.getElementById('zt-network-id').value.trim();
+      const feedback = document.getElementById('zt-feedback');
+      if (!netId) return alert("Please enter your ZeroTier Network ID");
+
+      feedback.innerHTML = '<span style="color:#0ea5e9;">Joining ZeroTier network...</span>';
+      try {
+        const res = await fetch('/api/agent/zerotier/join', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ networkId: netId })
+        });
+        const data = await res.json();
+        if (data.success) {
+          feedback.innerHTML = '<span style="color:#10b981;">✅ Successfully joined ZeroTier! Authorize this device in your ZeroTier Central console.</span>';
+          setTimeout(loadInfo, 3000);
+        } else {
+          feedback.innerHTML = `<span style="color:#ef4444;">❌ ${data.error}</span>`;
+        }
+      } catch (e) {
+        feedback.innerHTML = `<span style="color:#ef4444;">❌ Failed to contact agent</span>`;
       }
     }
 
@@ -293,7 +400,7 @@
         const grid = document.getElementById('printer-grid');
         grid.innerHTML = '';
         if (printers.length === 0) {
-          grid.innerHTML = '<div style="color:var(--text-muted); grid-column:1/-1;">No printers added to this agent yet.</div>';
+          grid.innerHTML = '<div style="color:var(--text-muted); grid-column:1/-1;">No printers added to this agent yet. Click "+ Add Printer" above.</div>';
           return;
         }
         printers.forEach(p => {
@@ -308,7 +415,7 @@
                 </div>
               </div>
               <div class="printer-details">
-                LAN IP: ${p.ipAddress}<br/>
+                Printer IP: ${p.ipAddress}<br/>
                 WebSocket: :${p.wsPort}<br/>
                 Camera: :${p.cameraPort}${p.cameraPath}
               </div>
@@ -328,7 +435,7 @@
       const name = document.getElementById('p-name').value;
       const ip = document.getElementById('p-ip').value.trim();
       const type = document.getElementById('p-type').value;
-      if (!ip) return alert("Please enter IP address");
+      if (!ip) return alert("Please enter printer IP address");
 
       await fetch('/api/printers', {
         method: 'POST',
@@ -368,6 +475,7 @@
     function closeAddModal() { document.getElementById('add-modal').style.display = 'none'; }
 
     loadInfo();
+    setInterval(loadInfo, 5000);
   </script>
 </body>
 </html>

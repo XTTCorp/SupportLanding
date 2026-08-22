@@ -10,6 +10,7 @@ import json
 import os
 import secrets
 import socket
+import subprocess
 import sys
 import uuid
 from typing import Dict, List, Optional
@@ -26,6 +27,7 @@ class AgentState:
         self.pairing_code: str = ""
         self.auth_token: str = ""
         self.printers: List[Dict] = []
+        self.zerotier_network_id: str = ""
         self.load_or_init()
 
     def load_or_init(self):
@@ -38,6 +40,7 @@ class AgentState:
                     self.pairing_code = data.get("pairing_code", self._generate_pairing_code())
                     self.auth_token = data.get("auth_token", secrets.token_hex(16))
                     self.printers = data.get("printers", [])
+                    self.zerotier_network_id = data.get("zerotier_network_id", "")
                     return
             except Exception as e:
                 print(f"Error loading config: {e}")
@@ -46,6 +49,7 @@ class AgentState:
         self.agent_id = str(uuid.uuid4())
         self.pairing_code = self._generate_pairing_code()
         self.auth_token = secrets.token_hex(16)
+        self.zerotier_network_id = ""
         self.printers = [
             {
                 "id": str(uuid.uuid4()),
@@ -60,7 +64,6 @@ class AgentState:
         self.save()
 
     def _generate_pairing_code(self) -> str:
-        # Generates a clean 6-digit numeric pairing code (e.g. 749201)
         return f"{secrets.randbelow(900000) + 100000}"
 
     def save(self):
@@ -71,20 +74,49 @@ class AgentState:
                 "agent_name": self.agent_name,
                 "pairing_code": self.pairing_code,
                 "auth_token": self.auth_token,
-                "printers": self.printers
+                "printers": self.printers,
+                "zerotier_network_id": self.zerotier_network_id
             }, f, indent=2)
 
 state = AgentState()
 
-def get_local_ip():
+def get_all_ips():
+    """Detects LAN, ZeroTier, Tailscale, and public IPs"""
+    ips = {
+        "lan": [],
+        "zerotier": [],
+        "tailscale": [],
+        "public": None
+    }
+
     try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("8.8.8.8", 80))
-        ip = s.getsockname()[0]
-        s.close()
-        return ip
+        # Scan system interfaces
+        output = subprocess.check_output(["ip", "-o", "-4", "addr", "show"], text=True, timeout=2)
+        for line in output.splitlines():
+            parts = line.split()
+            if len(parts) >= 4:
+                iface = parts[1]
+                ip = parts[3].split('/')[0]
+                if iface == 'lo':
+                    continue
+                elif iface.startswith('zt') or iface.startswith('ztp'):
+                    ips["zerotier"].append({"interface": iface, "ip": ip})
+                elif iface.startswith('tailscale') or iface.startswith('ts'):
+                    ips["tailscale"].append({"interface": iface, "ip": ip})
+                else:
+                    ips["lan"].append({"interface": iface, "ip": ip})
     except Exception:
-        return "127.0.0.1"
+        # Fallback
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            lan_ip = s.getsockname()[0]
+            s.close()
+            ips["lan"].append({"interface": "eth0", "ip": lan_ip})
+        except Exception:
+            ips["lan"].append({"interface": "eth0", "ip": "127.0.0.1"})
+
+    return ips
 
 # --- API Endpoints ---
 
@@ -95,15 +127,65 @@ async def handle_index(request):
     return web.Response(text="PrintPulse Agent is running.", content_type="text/plain")
 
 async def handle_agent_info(request):
+    all_ips = get_all_ips()
+    primary_lan = all_ips["lan"][0]["ip"] if all_ips["lan"] else "127.0.0.1"
+    zt_ip = all_ips["zerotier"][0]["ip"] if all_ips["zerotier"] else None
+    ts_ip = all_ips["tailscale"][0]["ip"] if all_ips["tailscale"] else None
+
+    # Check ZeroTier installed & network status
+    zt_status = "not_installed"
+    zt_networks = []
+    try:
+        zt_out = subprocess.check_output(["zerotier-cli", "listnetworks"], text=True, timeout=2)
+        zt_status = "installed"
+        for line in zt_out.splitlines()[1:]:
+            parts = line.split()
+            if len(parts) >= 8:
+                zt_networks.append({
+                    "nwid": parts[2],
+                    "name": parts[3],
+                    "mac": parts[4],
+                    "status": parts[5],
+                    "type": parts[6],
+                    "dev": parts[7],
+                    "assignedIps": parts[8] if len(parts) > 8 else ""
+                })
+    except Exception:
+        pass
+
     return web.json_response({
         "agentId": state.agent_id,
         "agentName": state.agent_name,
         "pairingCode": state.pairing_code,
-        "localIp": get_local_ip(),
+        "localIp": primary_lan,
+        "zeroTierIp": zt_ip,
+        "tailscaleIp": ts_ip,
+        "allIps": all_ips,
         "port": PORT,
         "printerCount": len(state.printers),
-        "version": "1.0.0"
+        "zeroTierStatus": zt_status,
+        "zeroTierNetworks": zt_networks,
+        "version": "1.1.0"
     })
+
+async def handle_zerotier_join(request):
+    try:
+        data = await request.json()
+        network_id = data.get("networkId", "").strip()
+        if not network_id:
+            return web.json_response({"success": False, "error": "Network ID required"}, status=400)
+
+        # Execute zerotier-cli join
+        out = subprocess.check_output(["zerotier-cli", "join", network_id], text=True, timeout=10)
+        state.zerotier_network_id = network_id
+        state.save()
+        return web.json_response({"success": True, "output": out.strip()})
+    except subprocess.CalledProcessError as e:
+        return web.json_response({"success": False, "error": f"ZeroTier error: {e.output}"}, status=500)
+    except FileNotFoundError:
+        return web.json_response({"success": False, "error": "zerotier-cli is not installed in this LXC/system. Install with: curl -s https://install.zerotier.com | bash"}, status=404)
+    except Exception as e:
+        return web.json_response({"success": False, "error": str(e)}, status=500)
 
 async def handle_pair(request):
     try:
@@ -126,8 +208,6 @@ def verify_token(request) -> bool:
     return token == state.auth_token
 
 async def handle_get_printers(request):
-    if not verify_token(request) and request.headers.get("Sec-Fetch-Mode") != "cors":
-        pass # Allow local web UI or token auth
     return web.json_response(state.printers)
 
 async def handle_add_printer(request):
@@ -142,7 +222,6 @@ async def handle_add_printer(request):
         "cameraPort": int(data.get("cameraPort", 3031)),
         "cameraPath": data.get("cameraPath", "/video")
     }
-    # Update or add
     existing = [p for p in state.printers if p["id"] == printer_id]
     if existing:
         state.printers = [printer if p["id"] == printer_id else p for p in state.printers]
@@ -244,18 +323,17 @@ async def handle_websocket_proxy(request):
 
 def create_app():
     app = web.Application()
-    # CORS setup for web requests
     app.router.add_get("/", handle_index)
     app.router.add_get("/api/agent/info", handle_agent_info)
     app.router.add_post("/api/agent/pair", handle_pair)
     app.router.add_post("/api/agent/regenerate", handle_regenerate_code)
+    app.router.add_post("/api/agent/zerotier/join", handle_zerotier_join)
     app.router.add_get("/api/printers", handle_get_printers)
     app.router.add_post("/api/printers", handle_add_printer)
     app.router.add_delete("/api/printers/{id}", handle_delete_printer)
     app.router.add_get("/api/printers/{id}/video", handle_video_proxy)
     app.router.add_get("/api/printers/{id}/ws", handle_websocket_proxy)
 
-    # Static assets if present
     web_dir = os.path.join(os.path.dirname(__file__), "web")
     if os.path.exists(web_dir):
         app.router.add_static("/static/", path=web_dir, name="static")
@@ -264,11 +342,14 @@ def create_app():
 
 if __name__ == "__main__":
     app = create_app()
-    local_ip = get_local_ip()
+    all_ips = get_all_ips()
+    primary_lan = all_ips["lan"][0]["ip"] if all_ips["lan"] else "127.0.0.1"
+    zt_ip = all_ips["zerotier"][0]["ip"] if all_ips["zerotier"] else "Not Joined"
     print("=" * 60)
     print("🚀 PrintPulse Relay Agent Starting...")
-    print(f"📍 Local Web UI: http://{local_ip}:{PORT} or http://localhost:{PORT}")
-    print(f"🔑 Pairing Code: {state.pairing_code}")
-    print(f"🛡️ Agent ID:     {state.agent_id}")
+    print(f"📍 Local LAN IP:    http://{primary_lan}:{PORT}")
+    print(f"🌐 ZeroTier IP:     http://{zt_ip}:{PORT}")
+    print(f"🔑 Pairing Code:    {state.pairing_code}")
+    print(f"🛡️ Agent ID:        {state.agent_id}")
     print("=" * 60)
     web.run_app(app, host="0.0.0.0", port=PORT)

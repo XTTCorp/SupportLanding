@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>PrintPulse Relay Agent</title>
+  <title>PrintPulse Relay Agent - Zero Config Remote Access</title>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
   <style>
     :root {
@@ -16,7 +16,6 @@
       --text: #f8fafc;
       --text-muted: #94a3b8;
       --amber: #f59e0b;
-      --red: #ef4444;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -27,7 +26,7 @@
       padding: 32px 20px;
     }
     .container {
-      max-width: 920px;
+      max-width: 900px;
       margin: 0 auto;
     }
     header {
@@ -74,6 +73,33 @@
       0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
       70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
       100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+    }
+
+    /* Global Tunnel Banner */
+    .tunnel-banner {
+      background: linear-gradient(135deg, #0369a1, #0284c7);
+      border-radius: 16px;
+      padding: 18px 24px;
+      margin-bottom: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      box-shadow: 0 8px 24px rgba(14, 165, 233, 0.25);
+    }
+    @media(max-width: 700px) {
+      .tunnel-banner { flex-direction: column; align-items: flex-start; }
+    }
+    .tunnel-info h2 { font-size: 17px; font-weight: 800; margin-bottom: 2px; }
+    .tunnel-info p { font-size: 13px; color: #e0f2fe; }
+    .tunnel-url {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      background: rgba(0,0,0,0.3);
+      padding: 6px 12px;
+      border-radius: 8px;
+      color: #ffffff;
+      word-break: break-all;
     }
 
     /* Hero Grid */
@@ -130,39 +156,11 @@
     .btn:hover { background: #0284c7; transform: translateY(-1px); }
     .btn-secondary { background: #1e293b; color: #cbd5e1; }
     .btn-secondary:hover { background: #334155; }
-    .btn-green { background: #10b981; }
-    .btn-green:hover { background: #059669; }
 
     .info-list { list-style: none; display: flex; flex-direction: column; gap: 10px; }
     .info-item { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #1e293b; padding-bottom: 8px; font-size: 13px; }
     .info-item span:first-child { color: var(--text-muted); }
     .info-item span:last-child { font-family: 'JetBrains Mono', monospace; font-weight: 600; color: #e2e8f0; }
-
-    /* Network Card */
-    .network-card {
-      background: var(--card-bg);
-      border: 1px solid var(--card-border);
-      border-radius: 16px;
-      padding: 24px;
-      margin-bottom: 24px;
-    }
-    .net-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
-    .net-title { font-size: 16px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
-    .zt-input-group {
-      display: flex;
-      gap: 10px;
-      margin-top: 14px;
-    }
-    .zt-input {
-      flex: 1;
-      background: #090d16;
-      border: 1px solid var(--card-border);
-      color: white;
-      padding: 10px 14px;
-      border-radius: 10px;
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 14px;
-    }
 
     /* Printers Section */
     .section-header {
@@ -232,33 +230,43 @@
         <div class="logo-icon">🖨️</div>
         <div>
           <h1>PrintPulse Relay Agent</h1>
-          <div style="font-size: 12px; color: var(--text-muted);">Remote Access Gateway</div>
+          <div style="font-size: 12px; color: var(--text-muted);">Zero-Config Remote Access Gateway</div>
         </div>
       </div>
       <div class="status-badge">
         <div class="pulse-dot"></div>
-        Relay Daemon Active
+        Relay Active
       </div>
     </header>
+
+    <!-- Global Auto-Encrypted Remote Tunnel Banner -->
+    <div class="tunnel-banner" id="tunnel-banner">
+      <div class="tunnel-info">
+        <h2>🌐 Global Remote Access (No VPN / CGNAT Bypass)</h2>
+        <p>Your secure encrypted tunnel is automatically online. Works on 5G/Cellular anywhere in the world.</p>
+        <div style="margin-top: 8px;" class="tunnel-url" id="tunnel-url">Establishing encrypted tunnel...</div>
+      </div>
+      <button class="btn btn-secondary" style="background:rgba(255,255,255,0.2); border:none;" onclick="copyRemoteUrl()">📋 Copy URL</button>
+    </div>
 
     <!-- Main Sync & Pairing Card -->
     <div class="hero-card">
       <div>
         <div class="hero-title">Mobile App Remote Syncing</div>
         <p class="hero-desc">
-          To connect your <strong>PrintPulse Android App</strong> remotely from outside your home network, enter your ZeroTier or Remote IP and this 6-digit code in the app's <strong>"Add Agent"</strong> screen.
+          To connect your <strong>PrintPulse Android App</strong> from outside your home, open the app, tap <strong>"Add Agent"</strong>, and enter your Remote Tunnel Address and this 6-digit code.
         </p>
         <ul class="info-list">
           <li class="info-item">
-            <span>🌐 ZeroTier / Mesh IP</span>
-            <span id="zt-ip" style="color:var(--cyan-glow); font-size:14px;">Checking...</span>
+            <span>🌐 Global Remote Address</span>
+            <span id="remote-host" style="color:var(--cyan-glow); font-size:12px;">Connecting...</span>
           </li>
           <li class="info-item">
             <span>🏠 Local LAN IP</span>
             <span id="lan-ip">127.0.0.1</span>
           </li>
           <li class="info-item">
-            <span>🔌 Relay Port</span>
+            <span>🔌 Local Port</span>
             <span id="agent-port">8088</span>
           </li>
           <li class="info-item">
@@ -276,25 +284,6 @@
           <button class="btn btn-secondary" onclick="regenerateCode()">🔄 Reset</button>
         </div>
       </div>
-    </div>
-
-    <!-- ZeroTier Integration Card -->
-    <div class="network-card">
-      <div class="net-header">
-        <div class="net-title">
-          <span>🌐 ZeroTier Network Tunnel</span>
-        </div>
-        <span id="zt-badge" style="font-size:12px; color:var(--text-muted);">Status: Checking...</span>
-      </div>
-      <p style="font-size: 13px; color: var(--text-muted); line-height: 1.5;">
-        Join this agent to your ZeroTier network to securely access cameras and printers from your phone anywhere without port forwarding.
-      </p>
-
-      <div class="zt-input-group">
-        <input type="text" id="zt-network-id" class="zt-input" placeholder="Enter 16-character ZeroTier Network ID (e.g. 8056c2e21c000001)" />
-        <button class="btn btn-green" onclick="joinZeroTier()">Join Network</button>
-      </div>
-      <div id="zt-feedback" style="font-size: 12px; margin-top: 8px;"></div>
     </div>
 
     <!-- Printers Section -->
@@ -317,7 +306,7 @@
         <input type="text" id="p-name" value="Elegoo Centauri Carbon" />
       </div>
       <div class="form-group">
-        <label>Printer Local IP Address (Any Subnet / VLAN)</label>
+        <label>Printer Local IP Address (e.g. 192.168.1.150)</label>
         <input type="text" id="p-ip" placeholder="192.168.1.150 or 10.0.x.x" />
       </div>
       <div class="form-group">
@@ -337,6 +326,7 @@
 
   <script>
     let currentPairingCode = "";
+    let currentRemoteUrl = "";
 
     async function loadInfo() {
       try {
@@ -348,48 +338,22 @@
         document.getElementById('pairing-code').innerText = data.pairingCode;
         currentPairingCode = data.pairingCode;
 
-        const ztIpElem = document.getElementById('zt-ip');
-        const ztBadge = document.getElementById('zt-badge');
+        const tunnelUrlElem = document.getElementById('tunnel-url');
+        const remoteHostElem = document.getElementById('remote-host');
 
-        if (data.zeroTierIp) {
-          ztIpElem.innerHTML = `<span style="color:#10b981;">${data.zeroTierIp} (Active)</span>`;
-          ztBadge.innerHTML = `<span style="color:#10b981; font-weight:600;">Connected (${data.zeroTierIp})</span>`;
-        } else if (data.zeroTierNetworks && data.zeroTierNetworks.length > 0) {
-          const net = data.zeroTierNetworks[0];
-          ztIpElem.innerText = net.assignedIps || "Waiting for Authorization";
-          ztBadge.innerText = `Network: ${net.nwid} (${net.status})`;
+        if (data.remoteTunnelUrl) {
+          currentRemoteUrl = data.remoteTunnelUrl;
+          const cleanHost = data.remoteTunnelUrl.replace('https://', '');
+          tunnelUrlElem.innerText = data.remoteTunnelUrl;
+          remoteHostElem.innerText = cleanHost;
         } else {
-          ztIpElem.innerHTML = `<span style="color:#f59e0b;">Not Joined</span>`;
-          ztBadge.innerText = data.zeroTierStatus === 'installed' ? 'ZeroTier Ready (Not Joined)' : 'ZeroTier Not Installed in LXC';
+          tunnelUrlElem.innerText = "Tunnel connecting in background...";
+          remoteHostElem.innerText = "Connecting...";
         }
 
         loadPrinters();
       } catch (e) {
         console.error(e);
-      }
-    }
-
-    async function joinZeroTier() {
-      const netId = document.getElementById('zt-network-id').value.trim();
-      const feedback = document.getElementById('zt-feedback');
-      if (!netId) return alert("Please enter your ZeroTier Network ID");
-
-      feedback.innerHTML = '<span style="color:#0ea5e9;">Joining ZeroTier network...</span>';
-      try {
-        const res = await fetch('/api/agent/zerotier/join', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ networkId: netId })
-        });
-        const data = await res.json();
-        if (data.success) {
-          feedback.innerHTML = '<span style="color:#10b981;">✅ Successfully joined ZeroTier! Authorize this device in your ZeroTier Central console.</span>';
-          setTimeout(loadInfo, 3000);
-        } else {
-          feedback.innerHTML = `<span style="color:#ef4444;">❌ ${data.error}</span>`;
-        }
-      } catch (e) {
-        feedback.innerHTML = `<span style="color:#ef4444;">❌ Failed to contact agent</span>`;
       }
     }
 
@@ -415,7 +379,7 @@
                 </div>
               </div>
               <div class="printer-details">
-                Printer IP: ${p.ipAddress}<br/>
+                LAN IP: ${p.ipAddress}<br/>
                 WebSocket: :${p.wsPort}<br/>
                 Camera: :${p.cameraPort}${p.cameraPath}
               </div>
@@ -471,11 +435,17 @@
       alert("Pairing code copied: " + currentPairingCode);
     }
 
+    function copyRemoteUrl() {
+      if (!currentRemoteUrl) return alert("Tunnel still connecting...");
+      navigator.clipboard.writeText(currentRemoteUrl);
+      alert("Remote URL copied to clipboard:\n" + currentRemoteUrl);
+    }
+
     function openAddModal() { document.getElementById('add-modal').style.display = 'flex'; }
     function closeAddModal() { document.getElementById('add-modal').style.display = 'none'; }
 
     loadInfo();
-    setInterval(loadInfo, 5000);
+    setInterval(loadInfo, 3000);
   </script>
 </body>
 </html>

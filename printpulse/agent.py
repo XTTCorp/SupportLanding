@@ -1,24 +1,125 @@
 #!/usr/bin/env python3
 """
 PrintPulse Relay Agent
-Lightweight companion daemon for remote 3D printer monitoring and camera streaming.
-Supports ZeroTier, Tailscale, LAN, and public reverse relays.
+Zero-Configuration, CGNAT-Bypassing Remote 3D Printer & Camera Gateway Daemon.
+Auto-manages built-in encrypted TLS tunnels (Cloudflare Quick Tunnels / P2P) with zero firewall rules or port forwarding.
 """
 
 import asyncio
 import json
 import os
+import platform
+import re
 import secrets
+import shutil
 import socket
 import subprocess
 import sys
+import threading
+import time
+import urllib.request
 import uuid
 from typing import Dict, List, Optional
 import aiohttp
 from aiohttp import web
 
-CONFIG_FILE = os.path.join(os.path.dirname(__file__), "data", "agent_config.json")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+CONFIG_FILE = os.path.join(BASE_DIR, "data", "agent_config.json")
+BIN_DIR = os.path.join(BASE_DIR, "bin")
+CLOUDFLARED_BIN = os.path.join(BIN_DIR, "cloudflared")
 PORT = int(os.environ.get("PRINTPULSE_PORT", "8088"))
+
+class TunnelManager:
+    """Manages zero-config outbound encrypted tunnel for CGNAT / NAT bypass"""
+    def __init__(self):
+        self.public_url: Optional[str] = None
+        self.process: Optional[subprocess.Popen] = None
+        self.status: str = "starting"
+        self.error: Optional[str] = None
+
+    def ensure_binary(self) -> bool:
+        if os.path.exists(CLOUDFLARED_BIN) and os.access(CLOUDFLARED_BIN, os.X_OK):
+            return True
+        system_bin = shutil.which("cloudflared")
+        if system_bin:
+            return True
+
+        os.makedirs(BIN_DIR, exist_ok=True)
+        arch = platform.machine().lower()
+        if arch in ("x86_64", "amd64"):
+            url = "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64"
+        elif arch in ("aarch64", "arm64"):
+            url = "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm64"
+        elif "arm" in arch:
+            url = "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm"
+        else:
+            self.error = f"Unsupported architecture: {arch}"
+            return False
+
+        try:
+            print(f"📦 Downloading zero-config tunnel daemon for {arch}...")
+            urllib.request.urlretrieve(url, CLOUDFLARED_BIN)
+            os.chmod(CLOUDFLARED_BIN, 0o755)
+            print("✅ Tunnel daemon installed successfully.")
+            return True
+        except Exception as e:
+            self.error = f"Failed to download tunnel binary: {e}"
+            print(f"❌ {self.error}")
+            return False
+
+    def start(self):
+        def _run():
+            if not self.ensure_binary():
+                self.status = "failed"
+                return
+
+            bin_path = CLOUDFLARED_BIN if os.path.exists(CLOUDFLARED_BIN) else "cloudflared"
+            cmd = [
+                bin_path, "tunnel",
+                "--url", f"http://127.0.0.1:{PORT}",
+                "--no-autoupdate",
+                "--metrics", "127.0.0.1:0"
+            ]
+
+            print("🌐 Starting secure outbound encrypted tunnel (NAT/CGNAT bypass)...")
+            self.status = "connecting"
+            try:
+                self.process = subprocess.Popen(
+                    cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    bufsize=1
+                )
+
+                url_pattern = re.compile(r"https://[a-zA-Z0-9-]+\.trycloudflare\.com")
+                for line in self.process.stdout:
+                    match = url_pattern.search(line)
+                    if match:
+                        self.public_url = match.group(0)
+                        self.status = "connected"
+                        print("=" * 60)
+                        print(f"🚀 GLOBAL REMOTE TUNNEL ACTIVE: {self.public_url}")
+                        print("=" * 60)
+                        break
+
+                self.process.wait()
+            except Exception as e:
+                self.error = str(e)
+                self.status = "error"
+                print(f"❌ Tunnel error: {e}")
+
+        t = threading.Thread(target=_run, daemon=True)
+        t.start()
+
+    def stop(self):
+        if self.process:
+            try:
+                self.process.terminate()
+            except Exception:
+                pass
+
+tunnel = TunnelManager()
 
 class AgentState:
     def __init__(self):
@@ -27,7 +128,6 @@ class AgentState:
         self.pairing_code: str = ""
         self.auth_token: str = ""
         self.printers: List[Dict] = []
-        self.zerotier_network_id: str = ""
         self.load_or_init()
 
     def load_or_init(self):
@@ -40,7 +140,6 @@ class AgentState:
                     self.pairing_code = data.get("pairing_code", self._generate_pairing_code())
                     self.auth_token = data.get("auth_token", secrets.token_hex(16))
                     self.printers = data.get("printers", [])
-                    self.zerotier_network_id = data.get("zerotier_network_id", "")
                     return
             except Exception as e:
                 print(f"Error loading config: {e}")
@@ -49,7 +148,6 @@ class AgentState:
         self.agent_id = str(uuid.uuid4())
         self.pairing_code = self._generate_pairing_code()
         self.auth_token = secrets.token_hex(16)
-        self.zerotier_network_id = ""
         self.printers = [
             {
                 "id": str(uuid.uuid4()),
@@ -74,118 +172,43 @@ class AgentState:
                 "agent_name": self.agent_name,
                 "pairing_code": self.pairing_code,
                 "auth_token": self.auth_token,
-                "printers": self.printers,
-                "zerotier_network_id": self.zerotier_network_id
+                "printers": self.printers
             }, f, indent=2)
 
 state = AgentState()
 
-def get_all_ips():
-    """Detects LAN, ZeroTier, Tailscale, and public IPs"""
-    ips = {
-        "lan": [],
-        "zerotier": [],
-        "tailscale": [],
-        "public": None
-    }
-
+def get_local_lan_ip():
     try:
-        # Scan system interfaces
-        output = subprocess.check_output(["ip", "-o", "-4", "addr", "show"], text=True, timeout=2)
-        for line in output.splitlines():
-            parts = line.split()
-            if len(parts) >= 4:
-                iface = parts[1]
-                ip = parts[3].split('/')[0]
-                if iface == 'lo':
-                    continue
-                elif iface.startswith('zt') or iface.startswith('ztp'):
-                    ips["zerotier"].append({"interface": iface, "ip": ip})
-                elif iface.startswith('tailscale') or iface.startswith('ts'):
-                    ips["tailscale"].append({"interface": iface, "ip": ip})
-                else:
-                    ips["lan"].append({"interface": iface, "ip": ip})
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        lan_ip = s.getsockname()[0]
+        s.close()
+        return lan_ip
     except Exception:
-        # Fallback
-        try:
-            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            s.connect(("8.8.8.8", 80))
-            lan_ip = s.getsockname()[0]
-            s.close()
-            ips["lan"].append({"interface": "eth0", "ip": lan_ip})
-        except Exception:
-            ips["lan"].append({"interface": "eth0", "ip": "127.0.0.1"})
-
-    return ips
+        return "127.0.0.1"
 
 # --- API Endpoints ---
 
 async def handle_index(request):
-    html_path = os.path.join(os.path.dirname(__file__), "web", "index.html")
+    html_path = os.path.join(BASE_DIR, "web", "index.html")
     if os.path.exists(html_path):
         return web.FileResponse(html_path)
     return web.Response(text="PrintPulse Agent is running.", content_type="text/plain")
 
 async def handle_agent_info(request):
-    all_ips = get_all_ips()
-    primary_lan = all_ips["lan"][0]["ip"] if all_ips["lan"] else "127.0.0.1"
-    zt_ip = all_ips["zerotier"][0]["ip"] if all_ips["zerotier"] else None
-    ts_ip = all_ips["tailscale"][0]["ip"] if all_ips["tailscale"] else None
-
-    # Check ZeroTier installed & network status
-    zt_status = "not_installed"
-    zt_networks = []
-    try:
-        zt_out = subprocess.check_output(["zerotier-cli", "listnetworks"], text=True, timeout=2)
-        zt_status = "installed"
-        for line in zt_out.splitlines()[1:]:
-            parts = line.split()
-            if len(parts) >= 8:
-                zt_networks.append({
-                    "nwid": parts[2],
-                    "name": parts[3],
-                    "mac": parts[4],
-                    "status": parts[5],
-                    "type": parts[6],
-                    "dev": parts[7],
-                    "assignedIps": parts[8] if len(parts) > 8 else ""
-                })
-    except Exception:
-        pass
-
+    local_ip = get_local_lan_ip()
     return web.json_response({
         "agentId": state.agent_id,
         "agentName": state.agent_name,
         "pairingCode": state.pairing_code,
-        "localIp": primary_lan,
-        "zeroTierIp": zt_ip,
-        "tailscaleIp": ts_ip,
-        "allIps": all_ips,
+        "localIp": local_ip,
         "port": PORT,
+        "remoteTunnelUrl": tunnel.public_url,
+        "tunnelStatus": tunnel.status,
+        "tunnelError": tunnel.error,
         "printerCount": len(state.printers),
-        "zeroTierStatus": zt_status,
-        "zeroTierNetworks": zt_networks,
-        "version": "1.1.0"
+        "version": "2.0.0"
     })
-
-async def handle_zerotier_join(request):
-    try:
-        data = await request.json()
-        network_id = data.get("networkId", "").strip()
-        if not network_id:
-            return web.json_response({"success": False, "error": "Network ID required"}, status=400)
-
-        # Execute zerotier-cli join
-        out = subprocess.check_output(["zerotier-cli", "join", network_id], text=True, timeout=10)
-        state.zerotier_network_id = network_id
-        state.save()
-        return web.json_response({"success": True, "output": out.strip()})
-    except subprocess.CalledProcessError as e:
-        return web.json_response({"success": False, "error": f"ZeroTier error: {e.output}"}, status=500)
-    except FileNotFoundError:
-        return web.json_response({"success": False, "error": "zerotier-cli is not installed in this LXC/system. Install with: curl -s https://install.zerotier.com | bash"}, status=404)
-    except Exception as e:
-        return web.json_response({"success": False, "error": str(e)}, status=500)
 
 async def handle_pair(request):
     try:
@@ -197,6 +220,7 @@ async def handle_pair(request):
                 "agentId": state.agent_id,
                 "agentName": state.agent_name,
                 "token": state.auth_token,
+                "remoteTunnelUrl": tunnel.public_url,
                 "printers": state.printers
             })
         return web.json_response({"success": False, "error": "Invalid pairing code"}, status=401)
@@ -265,6 +289,7 @@ async def handle_video_proxy(request):
             headers={
                 "Content-Type": resp.headers.get("Content-Type", "multipart/x-mixed-replace; boundary=frame"),
                 "Cache-Control": "no-cache, no-store, must-revalidate",
+                "Access-Control-Allow-Origin": "*",
                 "Connection": "close"
             }
         )
@@ -327,29 +352,27 @@ def create_app():
     app.router.add_get("/api/agent/info", handle_agent_info)
     app.router.add_post("/api/agent/pair", handle_pair)
     app.router.add_post("/api/agent/regenerate", handle_regenerate_code)
-    app.router.add_post("/api/agent/zerotier/join", handle_zerotier_join)
     app.router.add_get("/api/printers", handle_get_printers)
     app.router.add_post("/api/printers", handle_add_printer)
     app.router.add_delete("/api/printers/{id}", handle_delete_printer)
     app.router.add_get("/api/printers/{id}/video", handle_video_proxy)
     app.router.add_get("/api/printers/{id}/ws", handle_websocket_proxy)
 
-    web_dir = os.path.join(os.path.dirname(__file__), "web")
+    web_dir = os.path.join(BASE_DIR, "web")
     if os.path.exists(web_dir):
         app.router.add_static("/static/", path=web_dir, name="static")
 
     return app
 
 if __name__ == "__main__":
+    # Start auto-managed encrypted zero-config tunnel
+    tunnel.start()
+
     app = create_app()
-    all_ips = get_all_ips()
-    primary_lan = all_ips["lan"][0]["ip"] if all_ips["lan"] else "127.0.0.1"
-    zt_ip = all_ips["zerotier"][0]["ip"] if all_ips["zerotier"] else "Not Joined"
+    lan_ip = get_local_lan_ip()
     print("=" * 60)
-    print("🚀 PrintPulse Relay Agent Starting...")
-    print(f"📍 Local LAN IP:    http://{primary_lan}:{PORT}")
-    print(f"🌐 ZeroTier IP:     http://{zt_ip}:{PORT}")
-    print(f"🔑 Pairing Code:    {state.pairing_code}")
-    print(f"🛡️ Agent ID:        {state.agent_id}")
+    print("🚀 PrintPulse Relay Agent Running!")
+    print(f"🏠 Local LAN:        http://{lan_ip}:{PORT}")
+    print(f"🔑 Pairing Code:     {state.pairing_code}")
     print("=" * 60)
     web.run_app(app, host="0.0.0.0", port=PORT)

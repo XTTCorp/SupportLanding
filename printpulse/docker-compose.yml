@@ -1,0 +1,12 @@
+version: '3.8'
+
+services:
+  printpulse-agent:
+    build: .
+    container_name: printpulse-agent
+    restart: unless-stopped
+    network_mode: "host" # Allows local LAN printer discovery and ZeroTier / host access
+    volumes:
+      - ./data:/app/data
+    environment:
+      - PRINTPULSE_PORT=8088
